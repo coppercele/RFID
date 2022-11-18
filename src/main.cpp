@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include "MFRC522_I2C.h"
 #include <M5Stack.h>
+#include <ArduinoJson.h>
 #define LGFX_USE_V1
 #include <LovyanGFX.hpp>
 #define LGFX_AUTODETECT
@@ -11,6 +12,7 @@ MFRC522 mfrc522(0x28); // Create MFRC522 instance.  创建MFRC522实例
 
 static LGFX lcd;
 static LGFX_Sprite sprite(&lcd);
+DynamicJsonDocument doc(1024);
 
 struct beans {
   int day = 0;
@@ -18,7 +20,7 @@ struct beans {
   int minute = 0;
   int dateIndex = 2;
   int mode = 0;
-  byte uidByte[10];
+  char uidChar[8];
   byte uidSize = 0;
 } data;
 
@@ -33,7 +35,7 @@ void makeSprite() {
     sprite.setCursor(0, 0);
     sprite.printf("ID: ");
     for (int i = 0; i < data.uidSize; i++) {
-      sprite.printf("%02X ", data.uidByte[i]);
+      sprite.printf("%02X ", data.uidChar[i]);
     }
   }
 
@@ -81,6 +83,13 @@ void setup() {
   sprite.setColorDepth(8);
   sprite.createSprite(320, 240);
   makeSprite();
+
+  byte test[4] = {0x76, 0x4d, 0x69, 0x25};
+  char uid[mfrc522.uid.size];
+  sscanf(data.uidChar, "%0X", uid);
+  // String str = String(data.uidByte[0],HEX);
+  // str.concat
+  Serial.printf("uid=%02x%02x%02x%02x\n", uid[0], uid[1], uid[2], uid[3]);
 }
 
 void loop() {
@@ -151,8 +160,16 @@ void loop() {
   else {
     data.uidSize = mfrc522.uid.size;
     for (byte i = 0; i < mfrc522.uid.size; i++) {
-      data.uidByte[i] = mfrc522.uid.uidByte[i];
+      data.uidChar[i] = mfrc522.uid.uidByte[i];
     }
+
+    JsonArray json = doc.createNestedArray("json");
+    JsonObject json_0 = json.createNestedObject();
+    json_0["id"] = "000";
+    // json_0["uid"] = uid;
+    json_0["expire"] = "2020/01/01 24:59";
+    serializeJson(doc, Serial);
+    Serial.println();
     makeSprite();
   }
 
