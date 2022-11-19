@@ -20,7 +20,7 @@ struct beans {
   int minute = 0;
   int dateIndex = 2;
   int mode = 0;
-  char uidChar[8];
+  char *uidChar;
   byte uidSize = 0;
 } data;
 
@@ -34,9 +34,9 @@ void makeSprite() {
   if (data.uidSize != 0) {
     sprite.setCursor(0, 0);
     sprite.printf("ID: ");
-    for (int i = 0; i < data.uidSize; i++) {
-      sprite.printf("%02X ", data.uidChar[i]);
-    }
+    // for (int i = 0; i < data.uidSize; i++) {
+    sprite.printf("%s", data.uidChar);
+    // }
   }
 
   sprite.setCursor(0, 150);
@@ -44,6 +44,7 @@ void makeSprite() {
   for (int i = 0; i < data.dateIndex; i++) {
     sprite.printf("　　 ");
   }
+
   sprite.setTextSize(3);
   sprite.printf("%s", "■");
 
@@ -68,10 +69,10 @@ void makeSprite() {
 }
 
 void setup() {
-  M5.begin();       // Init M5Stack.  初始化M5Stack
-  M5.Power.begin(); // Init power  初始化电源模块
-  Wire.begin(); // Wire init, adding the I2C bus.  Wire初始化, 加入i2c总线
-
+  M5.begin(true, true, true, true); // Init M5Stack.  初始化M5Stack
+  M5.Power.begin();                 // Init power  初始化电源模块
+  // Wire.begin(); // Wire init, adding the I2C bus.  Wire初始化, 加入i2c总线
+  delay(500);
   mfrc522.PCD_Init(); // Init MFRC522.  初始化 MFRC522
                       // M5.Lcd.println("Please put the card\n\nUID:");
   lcd.init();
@@ -83,13 +84,6 @@ void setup() {
   sprite.setColorDepth(8);
   sprite.createSprite(320, 240);
   makeSprite();
-
-  byte test[4] = {0x76, 0x4d, 0x69, 0x25};
-  char uid[mfrc522.uid.size];
-  sscanf(data.uidChar, "%0X", uid);
-  // String str = String(data.uidByte[0],HEX);
-  // str.concat
-  Serial.printf("uid=%02x%02x%02x%02x\n", uid[0], uid[1], uid[2], uid[3]);
 }
 
 void loop() {
@@ -159,14 +153,18 @@ void loop() {
   }
   else {
     data.uidSize = mfrc522.uid.size;
-    for (byte i = 0; i < mfrc522.uid.size; i++) {
-      data.uidChar[i] = mfrc522.uid.uidByte[i];
-    }
+    char buf[9];
+
+    sprintf(buf, "%02X%02X%02X%02X", mfrc522.uid.uidByte[0],
+            mfrc522.uid.uidByte[1], mfrc522.uid.uidByte[2],
+            mfrc522.uid.uidByte[3]);
+    data.uidChar = buf;
 
     JsonArray json = doc.createNestedArray("json");
     JsonObject json_0 = json.createNestedObject();
     json_0["id"] = "000";
-    // json_0["uid"] = uid;
+
+    json_0["uid"] = buf;
     json_0["expire"] = "2020/01/01 24:59";
     serializeJson(doc, Serial);
     Serial.println();
