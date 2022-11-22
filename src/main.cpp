@@ -2,6 +2,8 @@
 #include <Arduino.h>
 #include "MFRC522_I2C.h"
 #include <M5Stack.h>
+#include "WiFi.h"
+#include "esp_wps.h"
 #include <ArduinoJson.h>
 #define LGFX_USE_V1
 #include <LovyanGFX.hpp>
@@ -14,6 +16,9 @@ static LGFX lcd;
 static LGFX_Sprite sprite(&lcd);
 DynamicJsonDocument doc(1024);
 
+char s[20];
+struct tm timeInfo;
+
 struct beans {
   int day = 0;
   int hour = 0;
@@ -22,6 +27,8 @@ struct beans {
   int mode = 0;
   char *uidChar;
   byte uidSize = 0;
+  bool isSdEnable = false;
+  bool isWifiEnable = false;
 } data;
 
 void makeSprite() {
@@ -65,6 +72,12 @@ void makeSprite() {
   sprite.setCursor(0, 130);
   sprite.printf("  %02d日%02d時%02d分", data.day, data.hour, data.minute);
 
+  sprite.setTextSize(1);
+  sprite.setCursor(280, 190);
+  sprite.printf("SD");
+  sprite.setCursor(280, 210);
+  sprite.printf("%s", data.isSdEnable ? "OK" : "NG");
+
   sprite.pushSprite(&lcd, 0, 0);
 }
 
@@ -73,6 +86,16 @@ void setup() {
   M5.Power.begin();                 // Init power  初始化电源模块
   // Wire.begin(); // Wire init, adding the I2C bus.  Wire初始化, 加入i2c总线
   delay(500);
+
+  File f = SD.open("/property.json");
+  if (f) {
+    data.isSdEnable = true;
+    Serial.printf("SD Card Found\n");
+  }
+  else {
+    Serial.printf("SD Card Not Found\n");
+  }
+
   mfrc522.PCD_Init(); // Init MFRC522.  初始化 MFRC522
                       // M5.Lcd.println("Please put the card\n\nUID:");
   lcd.init();
@@ -84,6 +107,34 @@ void setup() {
   sprite.setColorDepth(8);
   sprite.createSprite(320, 240);
   makeSprite();
+
+  WiFi.begin();
+
+  int count = 0;
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500); // 500ms毎に.を表示
+    Serial.print(".");
+    count++;
+    if (count == 10) {
+      //   // 5秒間待ってからWPSを開始する
+      //   // 以下サンプルそのまま
+      //   WiFi.onEvent(WiFiEvent);
+      //   WiFi.mode(WIFI_MODE_STA);
+
+      //   Serial.println("Starting WPS");
+      //   wpsInitConfig();
+      //   esp_wifi_wps_enable(&config);
+      // Serial.println(esp_wifi_wps_start(0));
+      Serial.println("Wifi failed.\n");
+      break;
+    }
+  }
+  if (WiFi.status()) {
+    Serial.println("\nConnected");
+    configTime(9 * 3600L, 0, "ntp.nict.jp", "time.google.com",
+               "ntp.jst.mfeed.ad.jp");
+    data.isWifiEnable = true;
+  }
 }
 
 void loop() {
@@ -160,14 +211,58 @@ void loop() {
             mfrc522.uid.uidByte[3]);
     data.uidChar = buf;
 
-    JsonArray json = doc.createNestedArray("json");
-    JsonObject json_0 = json.createNestedObject();
-    json_0["id"] = "000";
+    if (data.isSdEnable) {
+      File f = SD.open("/data.json", FILE_WRITE);
+      if (f) {
+        DeserializationError error = deserializeJson(doc, f);
 
-    json_0["uid"] = buf;
-    json_0["expire"] = "2020/01/01 24:59";
-    serializeJson(doc, Serial);
-    Serial.println();
+        if (error) {
+          char timeStr[20];
+          getLocalTime(&timeInfo);
+
+          // data.jsonが空
+          Serial.print("data.json is empty.");
+          // Serial.println(error.c_str());
+          JsonArray json = doc.createNestedArray("json");
+          JsonObject json_0 = json.createNestedObject();
+          json_0["id"] = "000";
+
+          json_0["uid"] = buf;
+          sprintf(timeStr, " %04d/%02d/%02d %02d:%02d:%02d",
+                  timeInfo.tm_year + 1900, timeInfo.tm_mon + 1,
+                  timeInfo.tm_mday, timeInfo.tm_hour, timeInfo.tm_min,
+                  timeInfo.tm_sec);
+          Serial.printf("time:%s\n", timeStr);
+          json_0["scandate"] = timeStr;
+
+          time_t expireDate = mktime(&timeInfo);
+
+          expireDate += data.minute * 60;
+          expireDate += data.hour * 3600;
+          expireDate += data.day * 24 * 60 * 60;
+
+          sprintf(timeStr, "%d", expireDate);
+          json_0["expire"] = timeStr;
+          serializeJson(doc, Serial);
+          Serial.println();
+          // Serial.printf("JSON Wrote to SD Card\n");
+        }
+
+        // for (JsonObject property_item : doc["property"].as<JsonArray>()) {
+
+        //   const char *ssid = property_item["SSID"];
+
+        //   if (ssid) {
+        //     Serial.printf("SSID:%s\n", ssid);
+        //   }
+        // }
+        serializeJson(doc, f);
+      }
+      else {
+        Serial.printf("SD Card Not Found\n");
+      }
+    }
+
     makeSprite();
   }
 
