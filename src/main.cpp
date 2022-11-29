@@ -82,7 +82,7 @@ void makeSprite() {
   sprite.pushSprite(&lcd, 0, 0);
 }
 
-int searchNewestId(JsonDocument jsonDocument) {
+int searchNewestId(JsonDocument &jsonDocument) {
 
   JsonArray array = jsonDocument["json"].as<JsonArray>();
   int size = array.size();
@@ -148,7 +148,7 @@ void setup() {
     Serial.print("deserialized:\n");
     serializeJsonPretty(jsonDocument, Serial);
     Serial.println();
-    int i = searchNewestId(jsonDocument);
+    int i = searchNewestId(&jsonDocument);
     Serial.printf("newestId:%d\n", i);
   }
   f2.close();
