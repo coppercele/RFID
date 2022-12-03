@@ -338,9 +338,15 @@ void loop() {
         break;
       case 1:
         // 削除
+        // TODO 削除
         break;
       case 2:
         // 確認
+        // TODO 確認
+
+        Serial.printf("id:%s uid:%s scandate:%s expire%s\n", object["id"],
+                      object["uid"], object["scandate"], object["expire"]);
+
         break;
 
       default:
@@ -373,7 +379,11 @@ void loop() {
       Serial.print("JSON Wrote to SD Card\n");
 
       break;
-
+    case 1:
+      // TODO 削除：見つかりませんでした
+      break;
+    case 2:
+    // TODO 確認：見つかりませんでした
     default:
       break;
     }
