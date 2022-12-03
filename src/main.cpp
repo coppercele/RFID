@@ -338,6 +338,7 @@ void loop() {
         break;
       case 1:
         // 削除
+        
         break;
       case 2:
         // 確認
