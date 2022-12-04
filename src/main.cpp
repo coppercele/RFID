@@ -26,6 +26,7 @@ struct beans {
   int dateIndex = 2;
   int mode = 0;
   char *uidChar;
+  char message[64];
   byte uidSize = 0;
   bool isSdEnable = false;
   bool isWifiEnable = false;
@@ -37,12 +38,10 @@ void makeSprite() {
   sprite.setFont(&fonts::lgfxJapanGothicP_20);
   sprite.setTextSize(1);
   sprite.setTextColor(TFT_WHITE, TFT_BLACK);
-  sprite.setTextSize(2);
-  if (data.uidSize != 0) {
+  if (data.message != NULL) {
     sprite.setCursor(0, 0);
-    sprite.printf("ID: ");
     // for (int i = 0; i < data.uidSize; i++) {
-    sprite.printf("%s", data.uidChar);
+    sprite.printf("%s", data.message);
     // }
   }
 
@@ -334,10 +333,19 @@ void loop() {
       switch (data.mode) {
       case 0:
         // 画面を更新して終了
+        sprintf(data.message, "UID:%s\n既に存在します", data.uidChar);
         Serial.printf("UID :%s already exist.\n", data.uidChar);
         break;
       case 1:
         // 削除
+        array.remove(i);
+        Serial.println("Matched record removed.");
+        // jsonを表示
+        serializeJsonPretty(jsonDocument, Serial);
+        Serial.println();
+
+        sprintf(data.message, "UID:%s\n削除されました", data.uidChar);
+
         break;
       case 2:
         // 確認
@@ -351,38 +359,43 @@ void loop() {
       default:
         break;
       }
+      makeSprite();
+      delay(1000);
+      return;
     }
 
+    // データが見つからなかった場合
     switch (data.mode) {
     case 0:
       // 追加
       // データが見つからなかったのでIDを増やして追加
+      {
+        // 一番古いidを取得
+        int newestId = searchNewestId(jsonDocument);
+        Serial.printf("newestId:%d\n", newestId);
 
-      // 一番古いidを取得
-      int newestId = searchNewestId(jsonDocument);
-      Serial.printf("newestId:%d\n", newestId);
+        // 追加する要素を作成
+        DynamicJsonDocument doc(200);
+        createNewRecord(doc, newestId + 1, data.uidChar);
 
-      // 追加する要素を作成
-      DynamicJsonDocument doc(200);
-      createNewRecord(doc, newestId + 1, data.uidChar);
-
-      // rootを"json"とする配列を取得
-      JsonArray jsonArray = jsonDocument["json"].as<JsonArray>();
-      // データを追加
-      jsonArray.add(doc);
-      // jsonを表示
-      serializeJsonPretty(jsonDocument, Serial);
-      Serial.println();
-      // SDカードに書きこむ
-      serializeJsonPretty(jsonDocument, f);
-      Serial.print("JSON Wrote to SD Card\n");
-
+        // rootを"json"とする配列を取得
+        JsonArray jsonArray = jsonDocument["json"].as<JsonArray>();
+        // データを追加
+        jsonArray.add(doc);
+        // jsonを表示
+        serializeJsonPretty(jsonDocument, Serial);
+        Serial.println();
+        // SDカードに書きこむ
+        serializeJsonPretty(jsonDocument, f);
+        Serial.print("JSON Wrote to SD Card\n");
+      }
       break;
     case 1:
       // TODO 削除：見つかりませんでした
       break;
     case 2:
-    // TODO 確認：見つかりませんでした
+      // TODO 確認：見つかりませんでした
+      break;
     default:
       break;
     }
