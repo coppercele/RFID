@@ -46,12 +46,12 @@ void makeSprite() {
   }
 
   sprite.setCursor(0, 150);
-  sprite.printf("  ");
+  sprite.setTextSize(3);
+  sprite.printf(" ");
   for (int i = 0; i < data.dateIndex; i++) {
-    sprite.printf("　　 ");
+    sprite.printf("　  ");
   }
 
-  sprite.setTextSize(3);
   sprite.printf("%s", "■");
 
   sprite.setTextSize(2);
@@ -345,14 +345,33 @@ void loop() {
         Serial.println();
 
         sprintf(data.message, "UID:%s\n削除されました", data.uidChar);
-
+        // // SDカードに書きこむ
+        // serializeJsonPretty(jsonDocument, f);
+        // Serial.print("JSON Wrote to SD Card\n");
         break;
       case 2:
         // 確認
-        // TODO 確認
+        {
+          const char *id = object["id"];
+          const char *uid = object["uid"];
+          const char *scandate = object["scandate"];
+          const char *expire = object["expire"];
+          const char *unixTime = object["expire"];
 
-        Serial.printf("id:%s uid:%s scandate:%s expire%s\n", object["id"],
-                      object["uid"], object["scandate"], object["expire"]);
+          struct tm *timeInfo = localtime((time_t *)&unixTime);
+          char timeStr[20];
+          sprintf(timeStr, "%04d/%02d/%02d %02d:%02d:%02d",
+                  timeInfo->tm_year + 1900, timeInfo->tm_mon + 1,
+                  timeInfo->tm_mday, timeInfo->tm_hour, timeInfo->tm_min,
+                  timeInfo->tm_sec);
+          Serial.printf("expire time:%s\n", timeStr);
+
+          Serial.printf("id:%s uid:%s scandate:%s expire:%s\n", id, uid,
+                        scandate, expire);
+          sprintf(data.message,
+                  "登録されています\nid:%s\nuid:%s\nscandate:%s\nexpire:%s\n",
+                  id, uid, scandate, timeStr);
+        }
 
         break;
 
@@ -391,10 +410,15 @@ void loop() {
       }
       break;
     case 1:
-      // TODO 削除：見つかりませんでした
+      // 削除：見つかりませんでした
+      Serial.println("UID not found.");
+      sprintf(data.message, "UID:%s\n登録されていません", data.uidChar);
+
       break;
     case 2:
-      // TODO 確認：見つかりませんでした
+      // 確認：見つかりませんでした
+      Serial.println("UID not found.");
+      sprintf(data.message, "UID:%s\n登録されていません", data.uidChar);
       break;
     default:
       break;
