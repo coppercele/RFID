@@ -10,7 +10,7 @@
 #define LGFX_AUTODETECT
 #include <LGFX_AUTODETECT.hpp>
 
-MFRC522 mfrc522(0x28); // Create MFRC522 instance.  创建MFRC522实例
+MFRC522 mfrc522(0x28);
 
 static LGFX lcd;
 static LGFX_Sprite sprite(&lcd);
@@ -30,6 +30,7 @@ struct beans {
   byte uidSize = 0;
   bool isSdEnable = false;
   bool isWifiEnable = false;
+  time_t time;
 } data;
 
 void makeSprite() {
@@ -83,6 +84,7 @@ void makeSprite() {
   sprite.pushSprite(&lcd, 0, 0);
 }
 
+// 既存のJSONを検索して一番大きいidを返す
 int searchNewestId(JsonDocument &jsonDocument) {
 
   // "json"をrootにする配列を取得
@@ -102,6 +104,7 @@ int searchNewestId(JsonDocument &jsonDocument) {
   return jsonIdInt;
 }
 
+// 新しいJsonDocumentレコードを作成する
 void createNewRecord(JsonDocument &doc, int id, char *uid) {
   // 追加する要素を作成
 
@@ -209,6 +212,9 @@ void setup() {
   //              "ntp.jst.mfeed.ad.jp");
   //   data.isWifiEnable = true;
   // }
+
+  getLocalTime(&timeInfo);
+  data.time = mktime(&timeInfo);
 }
 
 void loop() {
@@ -274,91 +280,36 @@ void loop() {
     makeSprite();
   }
 
-  if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) {
-    delay(200);
-    return;
-  }
-  data.uidSize = mfrc522.uid.size;
-  char buf[9];
+  getLocalTime(&timeInfo);
+  time_t now = mktime(&timeInfo);
 
-  sprintf(buf, "%02X%02X%02X%02X", mfrc522.uid.uidByte[0],
-          mfrc522.uid.uidByte[1], mfrc522.uid.uidByte[2],
-          mfrc522.uid.uidByte[3]);
-  data.uidChar = buf;
+  if (10 <= now - data.time) {
+    Serial.printf("10sec %ld\n", now);
+    data.time = now;
+    File f = SD.open("/data.json");
+    DynamicJsonDocument jsonDocument(1024);
+    DeserializationError error = deserializeJson(jsonDocument, f);
+    if (!error) {
+      JsonArray array = jsonDocument["json"].as<JsonArray>();
+      for (int i = 0; i < array.size(); i++) {
+        JsonObject object = array[i];
 
-  if (!data.isSdEnable) {
-    return;
-  }
+        const char *unixTime = object["expire"];
 
-  File f = SD.open("/data.json");
-  if (!f) {
-    Serial.printf("/data.json Not Found\n");
-    return;
-  }
+        long lUnixTime;
+        sscanf(unixTime, "%ld", lUnixTime);
 
-  DynamicJsonDocument jsonDocument(1024);
-  DeserializationError error = deserializeJson(jsonDocument, f);
-  // deserializeするとFileに書き込めなくなるので開きなおす
-  f.close();
-  f = SD.open("/data.json");
-  if (error) {
-    // data.jsonが空
-
-    Serial.print("data.json is empty.\n");
-    Serial.println(error.c_str());
-    // json配列を作成
-    JsonArray json = jsonDocument.createNestedArray("json");
-    DynamicJsonDocument doc(200);
-    createNewRecord(doc, 0, data.uidChar);
-    // json配列に要素を追加
-    json.add(doc);
-    // SDカードに書きこむ
-    serializeJsonPretty(jsonDocument, f);
-    Serial.print("JSON Wrote to SD Card\n");
-    makeSprite();
-    return;
-    // writeJson(0, data.uidChar, jsonDocument, f);
-  }
-  // data.jsonにデータがある
-  Serial.println("JSON data found\n");
-
-  JsonArray array = jsonDocument["json"].as<JsonArray>();
-  for (int i = 0; i < array.size(); i++) {
-    JsonObject object = array[i];
-    const char *uid = object["uid"];
-    Serial.printf("new uid:%s\n", data.uidChar);
-    Serial.printf("json uid:%s\n", uid);
-    if (!strcmp(uid, data.uidChar)) {
-      // スキャンされたuidが既に存在する
-      switch (data.mode) {
-      case 0:
-        // 画面を更新して終了
-        sprintf(data.message, "UID:%s\n既に存在します", data.uidChar);
-        Serial.printf("UID :%s already exist.\n", data.uidChar);
-        break;
-      case 1:
-        // 削除
-        array.remove(i);
-        Serial.println("Matched record removed.");
-        // jsonを表示
-        serializeJsonPretty(jsonDocument, Serial);
-        Serial.println();
-
-        sprintf(data.message, "UID:%s\n削除されました", data.uidChar);
-        // // SDカードに書きこむ
-        // serializeJsonPretty(jsonDocument, f);
-        // Serial.print("JSON Wrote to SD Card\n");
-        break;
-      case 2:
-        // 確認
-        {
+        if (lUnixTime < now) {
+          // 期限が切れ表示
           const char *id = object["id"];
           const char *uid = object["uid"];
           const char *scandate = object["scandate"];
           const char *expire = object["expire"];
           const char *unixTime = object["expire"];
 
-          struct tm *timeInfo = localtime((time_t *)&unixTime);
+          long lUnixTime;
+          sscanf(unixTime, "%ld", lUnixTime);
+          struct tm *timeInfo = localtime((time_t *)&lUnixTime);
           char timeStr[20];
           sprintf(timeStr, "%04d/%02d/%02d %02d:%02d:%02d",
                   timeInfo->tm_year + 1900, timeInfo->tm_mon + 1,
@@ -369,62 +320,165 @@ void loop() {
           Serial.printf("id:%s uid:%s scandate:%s expire:%s\n", id, uid,
                         scandate, expire);
           sprintf(data.message,
-                  "登録されています\nid:%s\nuid:%s\nscandate:%s\nexpire:%s\n",
+                  "期限が切れています\nid:%s\nuid:%s\nscandate:%s\nexpire:%s\n",
                   id, uid, scandate, timeStr);
         }
-
-        break;
-
-      default:
-        break;
       }
-      makeSprite();
-      delay(1000);
+    }
+
+    if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) {
+      delay(200);
+      return;
+    }
+    data.uidSize = mfrc522.uid.size;
+    char buf[9];
+
+    sprintf(buf, "%02X%02X%02X%02X", mfrc522.uid.uidByte[0],
+            mfrc522.uid.uidByte[1], mfrc522.uid.uidByte[2],
+            mfrc522.uid.uidByte[3]);
+    data.uidChar = buf;
+
+    if (!data.isSdEnable) {
       return;
     }
 
-    // データが見つからなかった場合
-    switch (data.mode) {
-    case 0:
-      // 追加
-      // データが見つからなかったのでIDを増やして追加
-      {
-        // 一番古いidを取得
-        int newestId = searchNewestId(jsonDocument);
-        Serial.printf("newestId:%d\n", newestId);
-
-        // 追加する要素を作成
-        DynamicJsonDocument doc(200);
-        createNewRecord(doc, newestId + 1, data.uidChar);
-
-        // rootを"json"とする配列を取得
-        JsonArray jsonArray = jsonDocument["json"].as<JsonArray>();
-        // データを追加
-        jsonArray.add(doc);
-        // jsonを表示
-        serializeJsonPretty(jsonDocument, Serial);
-        Serial.println();
-        // SDカードに書きこむ
-        serializeJsonPretty(jsonDocument, f);
-        Serial.print("JSON Wrote to SD Card\n");
-      }
-      break;
-    case 1:
-      // 削除：見つかりませんでした
-      Serial.println("UID not found.");
-      sprintf(data.message, "UID:%s\n登録されていません", data.uidChar);
-
-      break;
-    case 2:
-      // 確認：見つかりませんでした
-      Serial.println("UID not found.");
-      sprintf(data.message, "UID:%s\n登録されていません", data.uidChar);
-      break;
-    default:
-      break;
+    File f = SD.open("/data.json");
+    if (!f) {
+      Serial.printf("/data.json Not Found\n");
+      return;
     }
-  }
-  makeSprite();
 
-  delay(1);
-}
+    DynamicJsonDocument jsonDocument(1024);
+    DeserializationError error = deserializeJson(jsonDocument, f);
+    // deserializeするとFileに書き込めなくなるので開きなおす
+    f.close();
+    f = SD.open("/data.json");
+    if (error) {
+      // data.jsonが空
+
+      Serial.print("data.json is empty.\n");
+      Serial.println(error.c_str());
+      // json配列を作成
+      JsonArray json = jsonDocument.createNestedArray("json");
+      DynamicJsonDocument doc(200);
+      createNewRecord(doc, 0, data.uidChar);
+      // json配列に要素を追加
+      json.add(doc);
+      // SDカードに書きこむ
+      serializeJsonPretty(jsonDocument, f);
+      Serial.print("JSON Wrote to SD Card\n");
+      makeSprite();
+      return;
+      // writeJson(0, data.uidChar, jsonDocument, f);
+    }
+    // data.jsonにデータがある
+    Serial.println("JSON data found\n");
+
+    JsonArray array = jsonDocument["json"].as<JsonArray>();
+    for (int i = 0; i < array.size(); i++) {
+      JsonObject object = array[i];
+      const char *uid = object["uid"];
+      Serial.printf("new uid:%s\n", data.uidChar);
+      Serial.printf("json uid:%s\n", uid);
+      if (!strcmp(uid, data.uidChar)) {
+        // スキャンされたuidが既に存在する
+        switch (data.mode) {
+        case 0:
+          // 画面を更新して終了
+          sprintf(data.message, "UID:%s\n既に存在します", data.uidChar);
+          Serial.printf("UID :%s already exist.\n", data.uidChar);
+          break;
+        case 1:
+          // 削除
+          array.remove(i);
+          Serial.println("Matched record removed.");
+          // jsonを表示
+          serializeJsonPretty(jsonDocument, Serial);
+          Serial.println();
+
+          sprintf(data.message, "UID:%s\n削除されました", data.uidChar);
+          // // SDカードに書きこむ
+          // serializeJsonPretty(jsonDocument, f);
+          // Serial.print("JSON Wrote to SD Card\n");
+          break;
+        case 2:
+          // 確認
+          {
+            const char *id = object["id"];
+            const char *uid = object["uid"];
+            const char *scandate = object["scandate"];
+            const char *expire = object["expire"];
+            const char *unixTime = object["expire"];
+
+            long lUnixTime;
+            sscanf(unixTime, "%ld", lUnixTime);
+            struct tm *timeInfo = localtime((time_t *)&lUnixTime);
+            char timeStr[20];
+            sprintf(timeStr, "%04d/%02d/%02d %02d:%02d:%02d",
+                    timeInfo->tm_year + 1900, timeInfo->tm_mon + 1,
+                    timeInfo->tm_mday, timeInfo->tm_hour, timeInfo->tm_min,
+                    timeInfo->tm_sec);
+            Serial.printf("expire time:%s\n", timeStr);
+
+            Serial.printf("id:%s uid:%s scandate:%s expire:%s\n", id, uid,
+                          scandate, expire);
+            sprintf(data.message,
+                    "登録されています\nid:%s\nuid:%s\nscandate:%s\nexpire:%s\n",
+                    id, uid, scandate, timeStr);
+          }
+
+          break;
+
+        default:
+          break;
+        }
+        makeSprite();
+        delay(1000);
+        return;
+      }
+
+      // データが見つからなかった場合
+      switch (data.mode) {
+      case 0:
+        // 追加
+        // データが見つからなかったのでIDを増やして追加
+        {
+          // 一番古いidを取得
+          int newestId = searchNewestId(jsonDocument);
+          Serial.printf("newestId:%d\n", newestId);
+
+          // 追加する要素を作成
+          DynamicJsonDocument doc(200);
+          createNewRecord(doc, newestId + 1, data.uidChar);
+
+          // rootを"json"とする配列を取得
+          JsonArray jsonArray = jsonDocument["json"].as<JsonArray>();
+          // データを追加
+          jsonArray.add(doc);
+          // jsonを表示
+          serializeJsonPretty(jsonDocument, Serial);
+          Serial.println();
+          // SDカードに書きこむ
+          serializeJsonPretty(jsonDocument, f);
+          Serial.print("JSON Wrote to SD Card\n");
+        }
+        break;
+      case 1:
+        // 削除：見つかりませんでした
+        Serial.println("UID not found.");
+        sprintf(data.message, "UID:%s\n登録されていません", data.uidChar);
+
+        break;
+      case 2:
+        // 確認：見つかりませんでした
+        Serial.println("UID not found.");
+        sprintf(data.message, "UID:%s\n登録されていません", data.uidChar);
+        break;
+      default:
+        break;
+      }
+    }
+    makeSprite();
+
+    delay(1);
+  }
