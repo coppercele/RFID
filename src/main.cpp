@@ -280,6 +280,7 @@ void loop() {
     makeSprite();
   }
 
+  // ここから期限切れチェック
   getLocalTime(&timeInfo);
   time_t now = mktime(&timeInfo);
 
@@ -290,6 +291,7 @@ void loop() {
     DynamicJsonDocument jsonDocument(1024);
     DeserializationError error = deserializeJson(jsonDocument, f);
     if (!error) {
+      // JSONデータが存在する
       JsonArray array = jsonDocument["json"].as<JsonArray>();
       for (int i = 0; i < array.size(); i++) {
         JsonObject object = array[i];
@@ -298,9 +300,10 @@ void loop() {
 
         long lUnixTime;
         sscanf(unixTime, "%ld", lUnixTime);
-
+        // 期限が過去ならば
         if (lUnixTime < now) {
-          // 期限が切れ表示
+          // TODO displayJSON(JsonObject object, char * message)を作る
+          // 期限切れ表示
           const char *id = object["id"];
           const char *uid = object["uid"];
           const char *scandate = object["scandate"];
@@ -308,7 +311,7 @@ void loop() {
           const char *unixTime = object["expire"];
 
           long lUnixTime;
-          sscanf(unixTime, "%ld", lUnixTime);
+          sscanf(unixTime, "%ld", &lUnixTime);
           struct tm *timeInfo = localtime((time_t *)&lUnixTime);
           char timeStr[20];
           sprintf(timeStr, "%04d/%02d/%02d %02d:%02d:%02d",
