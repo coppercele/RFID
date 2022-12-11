@@ -33,6 +33,7 @@ struct beans {
   unsigned long time;
 } data;
 
+// Spriteを構築して画面を更新する
 void makeSprite() {
 
   sprite.clear(TFT_BLACK);
@@ -132,6 +133,8 @@ void createNewRecord(JsonDocument &doc, int id, char *uid) {
   doc["expire"] = timeStr;
 }
 
+// JSONの内容を画面に表示する
+// messageは先頭に表示される
 void displayJSON(JsonObject &object, char *message) {
   const char *id = object["id"];
   const char *uid = object["uid"];
@@ -336,6 +339,7 @@ void loop() {
   }
 
   if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) {
+    // RFIDカードが読めていないとreturn
     delay(200);
     return;
   }
@@ -345,12 +349,13 @@ void loop() {
   sprintf(buf, "%02X%02X%02X%02X", mfrc522.uid.uidByte[0],
           mfrc522.uid.uidByte[1], mfrc522.uid.uidByte[2],
           mfrc522.uid.uidByte[3]);
+  // 読み込んだuidを構造体に入れる
   data.uidChar = buf;
 
   if (!data.isSdEnable) {
     return;
   }
-
+  // SDカードからJSONを読み込む
   File f = SD.open("/data.json");
   if (!f) {
     Serial.printf("/data.json Not Found\n");
@@ -380,9 +385,9 @@ void loop() {
     return;
     // writeJson(0, data.uidChar, jsonDocument, f);
   }
+
   // data.jsonにデータがある
   Serial.println("JSON data found\n");
-
   JsonArray array = jsonDocument["json"].as<JsonArray>();
   for (int i = 0; i < array.size(); i++) {
     JsonObject object = array[i];
@@ -412,9 +417,7 @@ void loop() {
         break;
       case 2:
         // 確認
-        {
-          displayJSON(object, "登録されています");
-        }
+        { displayJSON(object, "登録されています"); }
 
         break;
 
