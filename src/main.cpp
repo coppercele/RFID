@@ -26,11 +26,11 @@ struct beans {
   int dateIndex = 2;
   int mode = 0;
   char *uidChar;
-  char message[64];
+  char message[128];
   byte uidSize = 0;
   bool isSdEnable = false;
   bool isWifiEnable = false;
-  time_t time;
+  unsigned long time;
 } data;
 
 void makeSprite() {
@@ -108,7 +108,7 @@ int searchNewestId(JsonDocument &jsonDocument) {
 void createNewRecord(JsonDocument &doc, int id, char *uid) {
   // 追加する要素を作成
 
-  char timeStr[20];
+  char timeStr[64];
   getLocalTime(&timeInfo);
 
   char buf[4];
@@ -128,11 +128,11 @@ void createNewRecord(JsonDocument &doc, int id, char *uid) {
   expireDate += data.hour * 3600;
   expireDate += data.day * 24 * 60 * 60;
 
-  sprintf(timeStr, "%d", expireDate);
+  sprintf(timeStr, "%ld", expireDate);
   doc["expire"] = timeStr;
 }
 
-void displayJSON(JsonObject object, char *message) {
+void displayJSON(JsonObject &object, char *message) {
   const char *id = object["id"];
   const char *uid = object["uid"];
   const char *scandate = object["scandate"];
@@ -142,14 +142,14 @@ void displayJSON(JsonObject object, char *message) {
   long lUnixTime;
   sscanf(unixTime, "%ld", &lUnixTime);
   struct tm *timeInfo = localtime((time_t *)&lUnixTime);
-  char timeStr[20];
+  char timeStr[64];
   sprintf(timeStr, "%04d/%02d/%02d %02d:%02d:%02d", timeInfo->tm_year + 1900,
           timeInfo->tm_mon + 1, timeInfo->tm_mday, timeInfo->tm_hour,
           timeInfo->tm_min, timeInfo->tm_sec);
   Serial.printf("expire time:%s\n", timeStr);
 
-  Serial.printf("id:%s uid:%s scandate:%s expire:%s\n", id, uid, scandate,
-                expire);
+  Serial.printf("%s id:%s uid:%s scandate:%s expire:%s\n", message, id, uid,
+                scandate, expire);
   sprintf(data.message, "%s\nid:%s\nuid:%s\nscandate:%s\nexpire:%s\n", message,
           id, uid, scandate, timeStr);
 }
@@ -235,8 +235,7 @@ void setup() {
   //   data.isWifiEnable = true;
   // }
 
-  getLocalTime(&timeInfo);
-  data.time = mktime(&timeInfo);
+  data.time = millis();
 }
 
 void loop() {
@@ -303,15 +302,15 @@ void loop() {
   }
 
   // ここから期限切れチェック
-  getLocalTime(&timeInfo);
-  time_t now = mktime(&timeInfo);
+  unsigned long now = millis();
 
-  if (10 <= now - data.time) {
+  if (10000 <= now - data.time) {
     Serial.printf("10sec %ld\n", now);
     data.time = now;
     File f = SD.open("/data.json");
     DynamicJsonDocument jsonDocument(1024);
     DeserializationError error = deserializeJson(jsonDocument, f);
+    f.close();
     if (!error) {
       // JSONデータが存在する
       JsonArray array = jsonDocument["json"].as<JsonArray>();
@@ -320,38 +319,20 @@ void loop() {
 
         const char *unixTime = object["expire"];
 
+        Serial.printf("expire char:%s\n", unixTime);
+
         long lUnixTime;
-        sscanf(unixTime, "%ld", lUnixTime);
+        sscanf(unixTime, "%ld", &lUnixTime);
         // 期限が過去ならば
         if (lUnixTime < now) {
           // TODO displayJSON(JsonObject object, char * message)を作る
           // 期限切れ表示
           displayJSON(object, "期限が切れています");
-          // const char *id = object["id"];
-          // const char *uid = object["uid"];
-          // const char *scandate = object["scandate"];
-          // const char *expire = object["expire"];
-          // const char *unixTime = object["expire"];
-
-          // long lUnixTime;
-          // sscanf(unixTime, "%ld", &lUnixTime);
-          // struct tm *timeInfo = localtime((time_t *)&lUnixTime);
-          // char timeStr[20];
-          // sprintf(timeStr, "%04d/%02d/%02d %02d:%02d:%02d",
-          //         timeInfo->tm_year + 1900, timeInfo->tm_mon + 1,
-          //         timeInfo->tm_mday, timeInfo->tm_hour, timeInfo->tm_min,
-          //         timeInfo->tm_sec);
-          // Serial.printf("expire time:%s\n", timeStr);
-
-          // Serial.printf("id:%s uid:%s scandate:%s expire:%s\n", id, uid,
-          //               scandate, expire);
-          // sprintf(data.message,
-          //         "期限が切れています\nid:%s\nuid:%s\nscandate:%s\nexpire:%s\n",
-          //         id, uid, scandate, timeStr);
+          makeSprite();
+          return;
         }
       }
     }
-    f.close();
   }
 
   if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) {
@@ -433,27 +414,6 @@ void loop() {
         // 確認
         {
           displayJSON(object, "登録されています");
-          // const char *id = object["id"];
-          // const char *uid = object["uid"];
-          // const char *scandate = object["scandate"];
-          // const char *expire = object["expire"];
-          // const char *unixTime = object["expire"];
-
-          // long lUnixTime;
-          // sscanf(unixTime, "%ld", lUnixTime);
-          // struct tm *timeInfo = localtime((time_t *)&lUnixTime);
-          // char timeStr[20];
-          // sprintf(timeStr, "%04d/%02d/%02d %02d:%02d:%02d",
-          //         timeInfo->tm_year + 1900, timeInfo->tm_mon + 1,
-          //         timeInfo->tm_mday, timeInfo->tm_hour, timeInfo->tm_min,
-          //         timeInfo->tm_sec);
-          // Serial.printf("expire time:%s\n", timeStr);
-
-          // Serial.printf("id:%s uid:%s scandate:%s expire:%s\n", id, uid,
-          //               scandate, expire);
-          // sprintf(data.message,
-          //         "登録されています\nid:%s\nuid:%s\nscandate:%s\nexpire:%s\n",
-          //         id, uid, scandate, timeStr);
         }
 
         break;

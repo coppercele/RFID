@@ -6,14 +6,12 @@
 #include "SPIFFS.h"
 #include "SD.h"
 #include <HTTPClient.h>
-void setUp(void) {
+void setUp() {
   // set stuff up here
 }
 
 void tearDown(void) {
   // clean stuff up here
 }
-
-void loop() {
-  // clean stuff up here
-}
+void setup() { UNITY_BEGIN(); }
+void loop() { UNITY_END(); }
