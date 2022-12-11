@@ -359,6 +359,7 @@ void loop() {
   File f = SD.open("/data.json");
   if (!f) {
     Serial.printf("/data.json Not Found\n");
+    delay(1000);
     return;
   }
 
@@ -382,8 +383,8 @@ void loop() {
     serializeJsonPretty(jsonDocument, f);
     Serial.print("JSON Wrote to SD Card\n");
     makeSprite();
+    delay(1000);
     return;
-    // writeJson(0, data.uidChar, jsonDocument, f);
   }
 
   // data.jsonにデータがある
@@ -471,6 +472,5 @@ void loop() {
     }
   }
   makeSprite();
-
-  delay(1);
+  delay(1000);
 }
