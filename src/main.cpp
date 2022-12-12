@@ -22,7 +22,7 @@ struct tm timeInfo;
 struct beans {
   int day = 0;
   int hour = 0;
-  int minute = 0;
+  int minute = 10;
   int dateIndex = 2;
   int mode = 0;
   char *uidChar;
@@ -31,15 +31,23 @@ struct beans {
   bool isSdEnable = false;
   bool isWifiEnable = false;
   unsigned long time;
+  bool isExpired = false;
 } data;
 
 // Spriteを構築して画面を更新する
 void makeSprite() {
-
-  sprite.clear(TFT_BLACK);
   sprite.setFont(&fonts::lgfxJapanGothicP_20);
   sprite.setTextSize(1);
-  sprite.setTextColor(TFT_WHITE, TFT_BLACK);
+
+  if (data.isExpired) {
+    sprite.clear(TFT_RED);
+    sprite.setTextColor(TFT_WHITE, TFT_RED);
+  }
+  else {
+    sprite.clear(TFT_BLACK);
+    sprite.setTextColor(TFT_WHITE, TFT_BLACK);
+  }
+
   if (data.message != NULL) {
     sprite.setCursor(0, 0);
     // for (int i = 0; i < data.uidSize; i++) {
@@ -125,7 +133,7 @@ void createNewRecord(JsonDocument &doc, int id, char *uid) {
 
   time_t expireDate = mktime(&timeInfo);
 
-  expireDate += data.minute * 60;
+  expireDate += data.minute * 1; // テストモードで分→秒
   expireDate += data.hour * 3600;
   expireDate += data.day * 24 * 60 * 60;
 
@@ -331,11 +339,13 @@ void loop() {
           // TODO displayJSON(JsonObject object, char * message)を作る
           // 期限切れ表示
           displayJSON(object, "期限が切れています");
+          data.isExpired = true;
           makeSprite();
           return;
         }
       }
     }
+    data.isExpired = false;
   }
 
   if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) {
