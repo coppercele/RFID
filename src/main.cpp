@@ -408,6 +408,7 @@ void loop() {
   Serial.printf("RFID read\n");
   sprite.clear(TFT_WHITE);
   sprite.pushSprite(&lcd, 0, 0);
+  delay(5000);
   if (!data.isSdEnable) {
     Serial.printf("SD NG\n");
     return;
@@ -506,7 +507,7 @@ void loop() {
         break;
       }
       makeSprite();
-      delay(1000);
+      delay(5000);
       return;
     }
 
@@ -553,5 +554,4 @@ void loop() {
     }
   }
   makeSprite();
-  delay(1000);
 }
