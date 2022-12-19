@@ -375,11 +375,14 @@ void loop() {
         const char *unixTime = object["expire"];
 
         Serial.printf("expire char:%s\n", unixTime);
+        getLocalTime(&timeInfo);
+        time_t nowTime = mktime(&timeInfo);
+        Serial.printf("nowTime long:%ld\n", nowTime);
 
         long lUnixTime;
         sscanf(unixTime, "%ld", &lUnixTime);
         // 期限が過去ならば
-        if (lUnixTime < now) {
+        if (lUnixTime < nowTime) {
           // TODO displayJSON(JsonObject object, char * message)を作る
           // 期限切れ表示
           displayJSON(object, "期限が切れています");
