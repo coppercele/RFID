@@ -22,7 +22,7 @@ struct tm timeInfo;
 struct beans {
   int day = 0;
   int hour = 0;
-  int minute = 0;
+  int minute = 10;
   int dateIndex = 2;
   int mode = 0;
   char *uidChar;
@@ -31,15 +31,23 @@ struct beans {
   bool isSdEnable = false;
   bool isWifiEnable = false;
   unsigned long time;
+  bool isExpired = false;
 } data;
 
 // Spriteを構築して画面を更新する
 void makeSprite() {
-
-  sprite.clear(TFT_BLACK);
   sprite.setFont(&fonts::lgfxJapanGothicP_20);
   sprite.setTextSize(1);
-  sprite.setTextColor(TFT_WHITE, TFT_BLACK);
+
+  if (data.isExpired) {
+    sprite.clear(TFT_RED);
+    sprite.setTextColor(TFT_WHITE, TFT_RED);
+  }
+  else {
+    sprite.clear(TFT_BLACK);
+    sprite.setTextColor(TFT_WHITE, TFT_BLACK);
+  }
+
   if (data.message != NULL) {
     sprite.setCursor(0, 0);
     // for (int i = 0; i < data.uidSize; i++) {
@@ -105,8 +113,36 @@ int searchNewestId(JsonDocument &jsonDocument) {
   return jsonIdInt;
 }
 
+// // 新しいJsonDocumentレコードを作成する
+// void createNewRecord(JsonDocument &doc, int id, char *uid) {
+//   // 追加する要素を作成
+
+//   char timeStr[64];
+//   getLocalTime(&timeInfo);
+
+//   char buf[4];
+//   sprintf(buf, "%03d", id);
+//   doc["id"] = buf;
+//   doc["uid"] = uid;
+
+//   sprintf(timeStr, "%04d/%02d/%02d %02d:%02d:%02d", timeInfo.tm_year + 1900,
+//           timeInfo.tm_mon + 1, timeInfo.tm_mday, timeInfo.tm_hour,
+//           timeInfo.tm_min, timeInfo.tm_sec);
+//   Serial.printf("time:%s\n", timeStr);
+//   doc["scandate"] = timeStr;
+
+//   time_t expireDate = mktime(&timeInfo);
+
+//   expireDate += data.minute * 1; // テストモードで分→秒
+//   expireDate += data.hour * 3600;
+//   expireDate += data.day * 24 * 60 * 60;
+
+//   sprintf(timeStr, "%ld", expireDate);
+//   doc["expire"] = timeStr;
+// }
+
 // 新しいJsonDocumentレコードを作成する
-void createNewRecord(JsonDocument &doc, int id, char *uid) {
+void createNewRecord(JsonObject &obj, int id, char *uid) {
   // 追加する要素を作成
 
   char timeStr[64];
@@ -114,23 +150,23 @@ void createNewRecord(JsonDocument &doc, int id, char *uid) {
 
   char buf[4];
   sprintf(buf, "%03d", id);
-  doc["id"] = buf;
-  doc["uid"] = uid;
+  obj["id"] = buf;
+  obj["uid"] = uid;
 
   sprintf(timeStr, "%04d/%02d/%02d %02d:%02d:%02d", timeInfo.tm_year + 1900,
           timeInfo.tm_mon + 1, timeInfo.tm_mday, timeInfo.tm_hour,
           timeInfo.tm_min, timeInfo.tm_sec);
   Serial.printf("time:%s\n", timeStr);
-  doc["scandate"] = timeStr;
+  obj["scandate"] = timeStr;
 
   time_t expireDate = mktime(&timeInfo);
 
-  expireDate += data.minute * 60;
+  expireDate += data.minute * 1; // テストモードで分→秒
   expireDate += data.hour * 3600;
   expireDate += data.day * 24 * 60 * 60;
 
   sprintf(timeStr, "%ld", expireDate);
-  doc["expire"] = timeStr;
+  obj["expire"] = timeStr;
 }
 
 // JSONの内容を画面に表示する
@@ -162,15 +198,17 @@ void setup() {
   M5.Power.begin();
   delay(500);
 
-  File f = SD.open("/property.json");
-  if (f) {
+  // SDチェック
+  if (SD.exists("/data.json")) {
     data.isSdEnable = true;
     Serial.printf("SD Card Found\n");
   }
   else {
+    // ファイルが存在しなければ作成を試みる
+    File f = SD.open("/data.json", FILE_WRITE);
+    f.close();
     Serial.printf("SD Card Not Found\n");
   }
-  f.close();
 
   mfrc522.PCD_Init();
 
@@ -184,29 +222,38 @@ void setup() {
   sprite.createSprite(320, 240);
   makeSprite();
 
-  Serial.print("setup json check.\n");
+  if (data.isSdEnable) {
+    // JSONチェック
+    Serial.print("setup json check.\n");
 
-  // SDカードから読み込む
-  f = SD.open("/data.json");
+    // SDカードから読み込む
+    File f = SD.open("/data.json");
 
-  DynamicJsonDocument jsonDocument(1024);
-  // deseriarizeする
-  DeserializationError error = deserializeJson(jsonDocument, f);
-  f.close();
-  f = SD.open("/data.json");
-
-  if (error) {
-    // data.jsonが空
-
-    Serial.print("data.json is empty.\n");
-    Serial.println(error.c_str());
+    DynamicJsonDocument jsonDocument(1024);
+    // deseriarizeする
+    DeserializationError error = deserializeJson(jsonDocument, f);
     f.close();
-  }
-  else {
-    // deseriarize成功
-    Serial.print("deserialized:\n");
-    serializeJsonPretty(jsonDocument, Serial);
-    Serial.println();
+    f = SD.open("/data.json");
+
+    if (error) {
+      // data.jsonが空
+      Serial.print("data.json is empty.\n");
+      Serial.println(error.c_str());
+    }
+    else {
+      // deseriarize成功
+      Serial.print("deserialized:\n");
+      serializeJsonPretty(jsonDocument, Serial);
+      Serial.println();
+
+      if (jsonDocument.isNull()) {
+        Serial.print("data.json is null.\n");
+        f = SD.open("/data.json", FILE_WRITE);
+        // fileクリア
+        f.close();
+        Serial.println("data.json cleared");
+      }
+    }
     f.close();
   }
 
@@ -304,6 +351,11 @@ void loop() {
     makeSprite();
   }
 
+  if (!data.isSdEnable) {
+    // SDが使えなかったらreturn
+    return;
+  }
+
   // ここから期限切れチェック
   unsigned long now = millis();
 
@@ -331,11 +383,13 @@ void loop() {
           // TODO displayJSON(JsonObject object, char * message)を作る
           // 期限切れ表示
           displayJSON(object, "期限が切れています");
+          data.isExpired = true;
           makeSprite();
           return;
         }
       }
     }
+    data.isExpired = false;
   }
 
   if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) {
@@ -351,8 +405,12 @@ void loop() {
           mfrc522.uid.uidByte[3]);
   // 読み込んだuidを構造体に入れる
   data.uidChar = buf;
-
+  Serial.printf("RFID read\n");
+  sprite.clear(TFT_WHITE);
+  sprite.pushSprite(&lcd, 0, 0);
+  delay(5000);
   if (!data.isSdEnable) {
+    Serial.printf("SD NG\n");
     return;
   }
   // SDカードからJSONを読み込む
@@ -367,23 +425,30 @@ void loop() {
   DeserializationError error = deserializeJson(jsonDocument, f);
   // deserializeするとFileに書き込めなくなるので開きなおす
   f.close();
-  f = SD.open("/data.json");
-  if (error) {
-    // data.jsonが空
 
+  if (error) {
+    f = SD.open("/data.json", FILE_WRITE);
+    // data.jsonが空
+    jsonDocument.clear();
     Serial.print("data.json is empty.\n");
     Serial.println(error.c_str());
     // json配列を作成
-    JsonArray json = jsonDocument.createNestedArray("json");
-    DynamicJsonDocument doc(200);
-    createNewRecord(doc, 0, data.uidChar);
-    // json配列に要素を追加
-    json.add(doc);
+    JsonArray array = jsonDocument.createNestedArray("json");
+    JsonObject object = array.createNestedObject();
+    createNewRecord(object, 0, data.uidChar);
+    // // json配列に要素を追加
+    // jsonDocument.add(array);
+
     // SDカードに書きこむ
-    serializeJsonPretty(jsonDocument, f);
+    size_t size = serializeJsonPretty(jsonDocument, Serial);
+    Serial.printf("\nSerialize size:%d\n", size);
+    size = serializeJsonPretty(jsonDocument, f);
+    Serial.printf("Serialize size:%d\n", size);
+    displayJSON(object, "追加されました");
     Serial.print("JSON Wrote to SD Card\n");
     makeSprite();
     delay(1000);
+    f.close();
     return;
   }
 
@@ -394,7 +459,12 @@ void loop() {
     JsonObject object = array[i];
     const char *uid = object["uid"];
     Serial.printf("new uid:%s\n", data.uidChar);
+    if (uid == nullptr) {
+      continue;
+    }
+
     Serial.printf("json uid:%s\n", uid);
+
     if (!strcmp(uid, data.uidChar)) {
       // スキャンされたuidが既に存在する
       switch (data.mode) {
@@ -403,7 +473,8 @@ void loop() {
         sprintf(data.message, "UID:%s\n既に存在します", data.uidChar);
         Serial.printf("UID :%s already exist.\n", data.uidChar);
         break;
-      case 1:
+      case 1: {
+        f = SD.open("/data.json", FILE_WRITE);
         // 削除
         array.remove(i);
         Serial.println("Matched record removed.");
@@ -412,10 +483,20 @@ void loop() {
         Serial.println();
 
         sprintf(data.message, "UID:%s\n削除されました", data.uidChar);
-        // // SDカードに書きこむ
-        // serializeJsonPretty(jsonDocument, f);
-        // Serial.print("JSON Wrote to SD Card\n");
+
+        if (array.size() == 0) {
+          // 何もせずに閉じると空ファイルになる
+          f.close();
+          Serial.println("data.json cleared");
+          return;
+        }
+        // SDカードに書きこむ
+        size_t size = serializeJsonPretty(jsonDocument, f);
+        Serial.printf("Serialize size:%d\n", size);
+        f.close();
+        Serial.print("JSON Wrote to SD Card\n");
         break;
+      }
       case 2:
         // 確認
         { displayJSON(object, "登録されています"); }
@@ -426,7 +507,7 @@ void loop() {
         break;
       }
       makeSprite();
-      delay(1000);
+      delay(5000);
       return;
     }
 
@@ -436,18 +517,19 @@ void loop() {
       // 追加
       // データが見つからなかったのでIDを増やして追加
       {
+        f = SD.open("/data.json", FILE_WRITE);
         // 一番古いidを取得
         int newestId = searchNewestId(jsonDocument);
         Serial.printf("newestId:%d\n", newestId);
 
         // 追加する要素を作成
-        DynamicJsonDocument doc(200);
-        createNewRecord(doc, newestId + 1, data.uidChar);
 
         // rootを"json"とする配列を取得
         JsonArray jsonArray = jsonDocument["json"].as<JsonArray>();
+        JsonObject obj = jsonArray.createNestedObject();
+        createNewRecord(obj, newestId + 1, data.uidChar);
         // データを追加
-        jsonArray.add(doc);
+        // jsonArray.add(obj);
         // jsonを表示
         serializeJsonPretty(jsonDocument, Serial);
         Serial.println();
@@ -472,5 +554,4 @@ void loop() {
     }
   }
   makeSprite();
-  delay(1000);
 }
