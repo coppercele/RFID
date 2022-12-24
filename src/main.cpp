@@ -464,6 +464,7 @@ void loop() {
           displayJSON(object, "期限が切れています");
           data.isExpired = true;
           makeSprite();
+          break;
         }
       }
     }
