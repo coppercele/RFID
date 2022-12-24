@@ -15,9 +15,8 @@ MFRC522 mfrc522(0x28);
 
 static LGFX lcd;
 static LGFX_Sprite sprite(&lcd);
-// DynamicJsonDocument doc(1024);
 
-char s[20];
+// char s[20];
 struct tm timeInfo;
 
 struct beans {
@@ -368,6 +367,7 @@ void loop() {
     delay(200);
     return;
   }
+  mfrc522.PCD_AntennaOff();
   data.uidSize = mfrc522.uid.size;
   char buf[9];
 
@@ -379,7 +379,8 @@ void loop() {
   Serial.printf("RFID read\n");
   sprite.clear(TFT_WHITE);
   sprite.pushSprite(&lcd, 0, 0);
-  delay(5000);
+  delay(3000);
+  mfrc522.PCD_AntennaOn();
   if (!data.isSdEnable) {
     Serial.printf("SD NG\n");
     return;
@@ -429,20 +430,21 @@ void loop() {
   for (int i = 0; i < array.size(); i++) {
     JsonObject object = array[i];
     const char *uid = object["uid"];
-    Serial.printf("new uid:%s\n", data.uidChar);
+    // Serial.printf("new uid:%s\n", data.uidChar);
     if (uid == nullptr) {
       continue;
     }
 
-    Serial.printf("json uid:%s\n", uid);
+    // Serial.printf("json uid:%s\n", uid);
 
     if (!strcmp(uid, data.uidChar)) {
       // スキャンされたuidが既に存在する
+      Serial.printf("UID :%s found in json.\n", data.uidChar);
       switch (data.mode) {
       case 0:
         // 画面を更新して終了
-        sprintf(data.message, "UID:%s\n既に存在します", data.uidChar);
         Serial.printf("UID :%s already exist.\n", data.uidChar);
+        displayJSON(object, "既に存在します");
         break;
       case 1: {
         f = SD.open("/data.json", FILE_WRITE);
@@ -452,8 +454,6 @@ void loop() {
         // jsonを表示
         serializeJsonPretty(jsonDocument, Serial);
         Serial.println();
-
-        sprintf(data.message, "UID:%s\n削除されました", data.uidChar);
 
         if (array.size() == 0) {
           // 何もせずに閉じると空ファイルになる
@@ -465,13 +465,15 @@ void loop() {
         // SDカードに書きこむ
         size_t size = serializeJsonPretty(jsonDocument, f);
         Serial.printf("Serialize size:%d\n", size);
+        delay(1000);
         f.close();
         Serial.print("JSON Wrote to SD Card\n");
+        displayJSON(object, "削除されました");
         break;
       }
       case 2:
         // 確認
-        { displayJSON(object, "登録されています"); }
+        displayJSON(object, "登録されています");
 
         break;
 
@@ -481,48 +483,49 @@ void loop() {
       makeSprite();
       return;
     }
+  }
+  // データが見つからなかった場合
+  switch (data.mode) {
+  case 0:
+    // 追加
+    // データが見つからなかったのでIDを増やして追加
+    {
+      f = SD.open("/data.json", FILE_WRITE);
+      // 一番古いidを取得
+      int newestId = searchNewestId(jsonDocument);
+      Serial.printf("newestId:%d\n", newestId);
 
-    // データが見つからなかった場合
-    switch (data.mode) {
-    case 0:
-      // 追加
-      // データが見つからなかったのでIDを増やして追加
-      {
-        f = SD.open("/data.json", FILE_WRITE);
-        // 一番古いidを取得
-        int newestId = searchNewestId(jsonDocument);
-        Serial.printf("newestId:%d\n", newestId);
+      // 追加する要素を作成
 
-        // 追加する要素を作成
-
-        // rootを"json"とする配列を取得
-        JsonArray jsonArray = jsonDocument["json"].as<JsonArray>();
-        JsonObject obj = jsonArray.createNestedObject();
-        createNewRecord(obj, newestId + 1, data.uidChar);
-        // データを追加
-        // jsonArray.add(obj);
-        // jsonを表示
-        serializeJsonPretty(jsonDocument, Serial);
-        Serial.println();
-        // SDカードに書きこむ
-        serializeJsonPretty(jsonDocument, f);
-        Serial.print("JSON Wrote to SD Card\n");
-      }
-      break;
-    case 1:
-      // 削除：見つかりませんでした
-      Serial.println("UID not found.");
-      sprintf(data.message, "UID:%s\n登録されていません", data.uidChar);
-
-      break;
-    case 2:
-      // 確認：見つかりませんでした
-      Serial.println("UID not found.");
-      sprintf(data.message, "UID:%s\n登録されていません", data.uidChar);
-      break;
-    default:
-      break;
+      // rootを"json"とする配列を取得
+      JsonArray jsonArray = jsonDocument["json"].as<JsonArray>();
+      JsonObject obj = jsonArray.createNestedObject();
+      // データを追加
+      createNewRecord(obj, newestId + 1, data.uidChar);
+      // jsonを表示
+      serializeJsonPretty(jsonDocument, Serial);
+      Serial.println();
+      // SDカードに書きこむ
+      serializeJsonPretty(jsonDocument, f);
+      Serial.print("JSON Wrote to SD Card\n");
+      displayJSON(obj, "追加されました");
+      delay(1000);
+      f.close();
     }
+    break;
+  case 1:
+    // 削除：見つかりませんでした
+    Serial.println("UID not found.");
+    sprintf(data.message, "UID:%s\n登録されていません", data.uidChar);
+
+    break;
+  case 2:
+    // 確認：見つかりませんでした
+    Serial.println("UID not found.");
+    sprintf(data.message, "UID:%s\n登録されていません", data.uidChar);
+    break;
+  default:
+    break;
   }
   makeSprite();
 }
