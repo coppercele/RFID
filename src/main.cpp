@@ -336,7 +336,7 @@ void setup() {
     f.close();
   }
 
-  // WiFi.begin();
+  // WiFi.begin("aaa","bbb");
 
   // int count = 0;
   // while (WiFi.status() != WL_CONNECTED) {
