@@ -4,7 +4,7 @@
 #include <M5Stack.h>
 #include "WiFi.h"
 // #include "esp_wps.h"
-#include "wpsConnector.h"
+// #include "wpsConnector.h"
 #include <ArduinoJson.h>
 #define LGFX_USE_V1
 #include <LovyanGFX.hpp>
@@ -89,6 +89,10 @@ void makeSprite() {
   sprite.printf("SD");
   sprite.setCursor(280, 210);
   sprite.printf("%s", data.isSdEnable ? "OK" : "NG");
+  sprite.setCursor(275, 0);
+  sprite.printf("WIFI");
+  sprite.setCursor(275, 20);
+  sprite.printf("%s", data.isWifiEnable ? "OK" : "NG");
 
   sprite.pushSprite(&lcd, 0, 0);
 }
@@ -193,7 +197,6 @@ void setup() {
   sprite.setPsram(true);
   sprite.setColorDepth(8);
   sprite.createSprite(320, 240);
-  makeSprite();
 
   if (data.isSdEnable) {
     // JSONチェック
@@ -231,17 +234,59 @@ void setup() {
   }
 
   WiFi.begin();
-
+  WiFi.disconnect(false, true);
   int count = 0;
   while (WiFi.status() != WL_CONNECTED) {
     delay(500); // 500ms毎に.を表示
     Serial.print(".");
     count++;
     if (count == 10) {
-      // 5秒間待ってからWPSを開始する
-      // 一度WiFiを切断してwpsConnect()を使う
-      WiFi.disconnect();
-      wpsConnect();
+
+      // wifi設定ファイルチェック
+      if (SD.exists("/wifi.json")) {
+        File f = SD.open("/wifi.json");
+        DynamicJsonDocument doc(128);
+
+        DeserializationError error = deserializeJson(doc, f);
+
+        if (error) {
+          Serial.print("deserializeJson() failed: ");
+          Serial.println(error.c_str());
+          return;
+        }
+
+        Serial.printf("wifi setting found\n");
+        // wifi.jsonからid,passowordを読み込む
+        const char *id = doc["id"];
+        const char *password = doc["password"];
+
+        Serial.printf("id:%s pass:%s\n", id, password);
+
+        WiFi.disconnect();
+        WiFi.begin(id, password);
+      }
+      else {
+        // ファイルが存在しなければ作成を試みる
+        // ただしSDカードがなくてもエラーにならない
+        File f = SD.open("/wifi.json", FILE_WRITE);
+        DynamicJsonDocument jsonDocument(48);
+        jsonDocument["id"] = "";
+        jsonDocument["password"] = "";
+        serializeJsonPretty(jsonDocument, f);
+        f.close();
+        Serial.printf("wifi.jspn created\n");
+
+        sprite.setFont(&fonts::lgfxJapanGothicP_20);
+        sprite.setTextSize(2);
+
+        sprite.printf("%s", "Pls set Wifi information in wifi.json on SD Card");
+        sprite.pushSprite(&lcd, 0, 0);
+      }
+
+      //   // 5秒間待ってからWPSを開始する
+      //   // 一度WiFiを切断してwpsConnect()を使う
+      //   WiFi.disconnect();
+      //   wpsConnect();
     }
   }
   if (WiFi.status()) {
@@ -252,6 +297,7 @@ void setup() {
                "ntp.jst.mfeed.ad.jp");
     data.isWifiEnable = true;
   }
+  makeSprite();
 
   data.time = millis();
 }
