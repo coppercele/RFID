@@ -177,6 +177,7 @@ void setup() {
   }
   else {
     // ファイルが存在しなければ作成を試みる
+    // SDが存在していれば次のリセット時にチェックが通る
     File f = SD.open("/data.json", FILE_WRITE);
     f.close();
     Serial.printf("SD Card Not Found\n");
@@ -364,7 +365,7 @@ void loop() {
 
   if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) {
     // RFIDカードが読めていないとreturn
-    delay(200);
+    delay(50);
     return;
   }
   mfrc522.PCD_AntennaOff();
@@ -399,29 +400,33 @@ void loop() {
   f.close();
 
   if (error) {
-    f = SD.open("/data.json", FILE_WRITE);
-    // data.jsonが空
-    jsonDocument.clear();
-    Serial.print("data.json is empty.\n");
-    Serial.println(error.c_str());
-    // json配列を作成
-    JsonArray array = jsonDocument.createNestedArray("json");
-    JsonObject object = array.createNestedObject();
-    createNewRecord(object, 0, data.uidChar);
-    // // json配列に要素を追加
-    // jsonDocument.add(array);
+    // 追加モードの時
+    if (data.mode == 0) {
+      f = SD.open("/data.json", FILE_WRITE);
 
-    // SDカードに書きこむ
-    size_t size = serializeJsonPretty(jsonDocument, Serial);
-    Serial.printf("\nSerialize size:%d\n", size);
-    size = serializeJsonPretty(jsonDocument, f);
-    Serial.printf("Serialize size:%d\n", size);
-    displayJSON(object, "追加されました");
-    Serial.print("JSON Wrote to SD Card\n");
-    makeSprite();
-    delay(1000);
-    f.close();
-    return;
+      // data.jsonが空
+      jsonDocument.clear();
+      Serial.print("data.json is empty.\n");
+      Serial.println(error.c_str());
+      // json配列を作成
+      JsonArray array = jsonDocument.createNestedArray("json");
+      JsonObject object = array.createNestedObject();
+      createNewRecord(object, 0, data.uidChar);
+      // // json配列に要素を追加
+      // jsonDocument.add(array);
+
+      // SDカードに書きこむ
+      size_t size = serializeJsonPretty(jsonDocument, Serial);
+      Serial.printf("\nSerialize size:%d\n", size);
+      size = serializeJsonPretty(jsonDocument, f);
+      Serial.printf("Serialize size:%d\n", size);
+      displayJSON(object, "追加されました");
+      Serial.print("JSON Wrote to SD Card\n");
+      makeSprite();
+      delay(1000);
+      f.close();
+      return;
+    }
   }
 
   // data.jsonにデータがある
@@ -451,6 +456,7 @@ void loop() {
         // 削除
         array.remove(i);
         Serial.println("Matched record removed.");
+        displayJSON(object, "削除されました");
         // jsonを表示
         serializeJsonPretty(jsonDocument, Serial);
         Serial.println();
