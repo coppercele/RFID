@@ -137,8 +137,8 @@ void createNewRecord(JsonObject &obj, int id, char *uid) {
 
   time_t expireDate = mktime(&timeInfo);
 
-  expireDate += data.minute * 1; // テストモードで分→秒
-  expireDate += data.hour * 3600;
+  expireDate += data.minute * 60;
+  expireDate += data.hour * 60 * 60;
   expireDate += data.day * 24 * 60 * 60;
 
   sprintf(timeStr, "%ld", expireDate);
@@ -373,8 +373,9 @@ void loop() {
   // ここから期限切れチェック
   unsigned long now = millis();
 
-  if (10000 <= now - data.time) {
-    Serial.printf("10sec %ld\n", now / 1000);
+  // 5分ごとにチェック
+  if ((5 * 60 * 1000) <= now - data.time) {
+    Serial.printf("5min %ld\n", now / 1000);
     data.time = now;
     File f = SD.open("/data.json");
     DynamicJsonDocument jsonDocument(1024);
