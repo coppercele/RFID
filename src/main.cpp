@@ -234,7 +234,6 @@ void setup() {
   }
 
   WiFi.begin();
-  WiFi.disconnect(false, true);
   int count = 0;
   while (WiFi.status() != WL_CONNECTED) {
     delay(500); // 500ms毎に.を表示
