@@ -256,20 +256,20 @@ void setup() {
 
         Serial.printf("wifi setting found\n");
         // wifi.jsonからid,passowordを読み込む
-        const char *id = doc["id"];
+        const char *ssid = doc["ssid"];
         const char *password = doc["password"];
 
-        Serial.printf("id:%s pass:%s\n", id, password);
+        Serial.printf("ssid:%s pass:%s\n", ssid, password);
 
         WiFi.disconnect();
-        WiFi.begin(id, password);
+        WiFi.begin(ssid, password);
       }
       else {
         // ファイルが存在しなければ作成を試みる
         // ただしSDカードがなくてもエラーにならない
         File f = SD.open("/wifi.json", FILE_WRITE);
         DynamicJsonDocument jsonDocument(48);
-        jsonDocument["id"] = "";
+        jsonDocument["ssid"] = "";
         jsonDocument["password"] = "";
         serializeJsonPretty(jsonDocument, f);
         f.close();
