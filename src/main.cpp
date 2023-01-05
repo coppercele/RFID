@@ -135,8 +135,10 @@ void createNewRecord(JsonObject &obj, int id, char *uid) {
   Serial.printf("time:%s\n", timeStr);
   obj["scandate"] = timeStr;
 
+  // 現時刻のUnixTimeを取得
   time_t expireDate = mktime(&timeInfo);
 
+  // 画面UIの日時分から値を取得してUnixTimeに足す
   expireDate += data.minute * 60;
   expireDate += data.hour * 60 * 60;
   expireDate += data.day * 24 * 60 * 60;
@@ -288,6 +290,7 @@ void setup() {
       //   wpsConnect();
     }
   }
+  // NTPで時計合わせをする
   if (WiFi.status()) {
     Serial.println("\nConnected");
     Serial.println("ntp configured");
@@ -446,7 +449,7 @@ void loop() {
   f.close();
 
   if (error) {
-    // 追加モードの時
+    // 登録モードの時
     if (data.mode == 0) {
       f = SD.open("/data.json", FILE_WRITE);
 
@@ -458,8 +461,6 @@ void loop() {
       JsonArray array = jsonDocument.createNestedArray("json");
       JsonObject object = array.createNestedObject();
       createNewRecord(object, 0, data.uidChar);
-      // // json配列に要素を追加
-      // jsonDocument.add(array);
 
       // SDカードに書きこむ
       size_t size = serializeJsonPretty(jsonDocument, Serial);
